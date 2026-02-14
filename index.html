@@ -2,266 +2,274 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Tile Breaker Ultimate</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tile Breaker Clean</title>
+
 <style>
-body {
-  margin:0;
-  background: linear-gradient(to bottom, #0f2027, #203a43, #2c5364);
-  overflow:hidden;
-  font-family: Arial;
-  text-align:center;
-  color:white;
+body{
+    margin:0;
+    height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    overflow:hidden;
+    font-family:Arial;
+    background: radial-gradient(circle at 20% 20%, #1a1a2e, #0f0f1a 50%, #000 100%);
 }
-
-canvas {
-  background:#111;
-  display:block;
-  margin:auto;
-  border-radius:12px;
-  box-shadow:0 0 20px cyan;
-  touch-action: none;
+canvas{
+    background: radial-gradient(circle,#111,#000);
+    border-radius:20px;
+    box-shadow:0 0 40px cyan;
 }
-
-#menu {
-  position:absolute;
-  top:50%;
-  left:50%;
-  transform:translate(-50%,-50%);
+#menu{
+    position:absolute;
+    text-align:center;
+    color:cyan;
 }
-
-button {
-  padding:10px 20px;
-  margin:5px;
-  font-size:16px;
-  border:none;
-  border-radius:8px;
-  cursor:pointer;
+button{
+    padding:8px 16px;
+    margin:6px;
+    border:none;
+    border-radius:8px;
+    background:linear-gradient(45deg,cyan,blue);
+    font-weight:bold;
+    cursor:pointer;
+}
+#ui{
+    position:absolute;
+    top:10px;
+    color:white;
+    font-size:14px;
 }
 </style>
 </head>
 <body>
 
 <div id="menu">
-  <h1>Tile Breaker Ultimate</h1>
-  <p>Select Difficulty</p>
-  <button onclick="startGame('easy')">Easy</button>
-  <button onclick="startGame('medium')">Medium</button>
-  <button onclick="startGame('hard')">Hard</button>
+    <h2>Select Difficulty</h2>
+    <button onclick="startGame('easy')">Easy</button>
+    <button onclick="startGame('medium')">Medium</button>
+    <button onclick="startGame('hard')">Hard</button>
 </div>
 
-<canvas id="gameCanvas"></canvas>
+<div id="ui">
+Score: <span id="score">0</span> |
+Lives: <span id="lives">3</span> |
+Level: <span id="level">1</span> |
+High: <span id="high">0</span>
+</div>
+
+<canvas id="game" width="900" height="500"></canvas>
 
 <script>
-const canvas = document.getElementById("gameCanvas");
+const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-canvas.width = window.innerWidth > 800 ? 800 : window.innerWidth - 20;
-canvas.height = 500;
+let paddle, balls, bricks, powerUps;
+let rows, cols = 12;
+let score=0, lives=3, level=1;
+let highScore=localStorage.getItem("tbHigh")||0;
+let ballSpeed=4;
+let running=false;
 
-let paddleHeight = 15;
-let paddleWidth = 120;
-let paddleX;
-let ballRadius = 10;
-let x,y,dx,dy;
-let rightPressed=false;
-let leftPressed=false;
-let score=0;
-let lives=3;
-let level=1;
-let gameStarted=false;
-let paused=false;
+document.getElementById("high").innerText=highScore;
 
-let brickRowCount;
-let brickColumnCount=8;
-let brickWidth=75;
-let brickHeight=20;
-let brickPadding=10;
-let brickOffsetTop=60;
-let brickOffsetLeft=30;
-let bricks=[];
+function startGame(mode){
+    document.getElementById("menu").style.display="none";
+    running=true;
 
-let powerUps=[];
+    if(mode==="easy"){rows=4; ballSpeed=3;}
+    if(mode==="medium"){rows=6; ballSpeed=4;}
+    if(mode==="hard"){rows=8; ballSpeed=5;}
 
-function startGame(difficulty){
-  document.getElementById("menu").style.display="none";
-  
-  if(difficulty==="easy"){ brickRowCount=3; lives=5; }
-  if(difficulty==="medium"){ brickRowCount=5; lives=3; }
-  if(difficulty==="hard"){ brickRowCount=7; lives=2; }
-
-  resetGame();
-  gameStarted=true;
-  draw();
+    score=0; lives=3; level=1;
+    init();
 }
 
-function resetGame(){
-  paddleX=(canvas.width-paddleWidth)/2;
-  x=canvas.width/2;
-  y=canvas.height-30;
-  dx=4;
-  dy=-4;
-  createBricks();
+function init(){
+    paddle={x:canvas.width/2-60,y:canvas.height-40,w:120,h:18};
+    balls=[createBall()];
+    powerUps=[];
+    generateBricks();
 }
 
-function createBricks(){
-  bricks=[];
-  for(let c=0;c<brickColumnCount;c++){
-    bricks[c]=[];
-    for(let r=0;r<brickRowCount;r++){
-      bricks[c][r]={x:0,y:0,status:1};
-    }
-  }
+function createBall(){
+    return {
+        x:canvas.width/2,
+        y:canvas.height-60,
+        r:8,
+        dx:ballSpeed*(Math.random()<0.5?1:-1),
+        dy:-ballSpeed
+    };
 }
 
-document.addEventListener("keydown", e=>{
-  if(e.key==="Right"||e.key==="ArrowRight") rightPressed=true;
-  if(e.key==="Left"||e.key==="ArrowLeft") leftPressed=true;
-  if(e.key==="p") paused=!paused;
-});
-document.addEventListener("keyup", e=>{
-  if(e.key==="Right"||e.key==="ArrowRight") rightPressed=false;
-  if(e.key==="Left"||e.key==="ArrowLeft") leftPressed=false;
-});
+function generateBricks(){
+    bricks=[];
+    let bw=60, bh=20, pad=10;
+    let offsetX=(canvas.width-(cols*(bw+pad)))/2;
 
-// Mouse Control (PC)
-canvas.addEventListener("mousemove", e=>{
-  let rect = canvas.getBoundingClientRect();
-  let relativeX = e.clientX - rect.left;
-  if(relativeX > 0 && relativeX < canvas.width){
-    paddleX = relativeX - paddleWidth/2;
-  }
-});
-
-// Touch Control (Mobile)
-canvas.addEventListener("touchmove", e=>{
-  let rect = canvas.getBoundingClientRect();
-  let touch = e.touches[0];
-  let relativeX = touch.clientX - rect.left;
-  if(relativeX > 0 && relativeX < canvas.width){
-    paddleX = relativeX - paddleWidth/2;
-  }
-});
-
-function drawPaddle(){
-  ctx.beginPath();
-  ctx.roundRect(paddleX, canvas.height-paddleHeight-10, paddleWidth, paddleHeight, 10);
-  ctx.fillStyle="cyan";
-  ctx.fill();
-  ctx.closePath();
-}
-
-function drawBall(){
-  ctx.beginPath();
-  ctx.arc(x,y,ballRadius,0,Math.PI*2);
-  ctx.fillStyle="white";
-  ctx.fill();
-  ctx.closePath();
-}
-
-function drawBricks(){
-  for(let c=0;c<brickColumnCount;c++){
-    for(let r=0;r<brickRowCount;r++){
-      if(bricks[c][r].status==1){
-        let brickX=(c*(brickWidth+brickPadding))+brickOffsetLeft;
-        let brickY=(r*(brickHeight+brickPadding))+brickOffsetTop;
-        bricks[c][r].x=brickX;
-        bricks[c][r].y=brickY;
-        ctx.beginPath();
-        ctx.roundRect(brickX,brickY,brickWidth,brickHeight,6);
-        ctx.fillStyle="orange";
-        ctx.fill();
-        ctx.closePath();
-      }
-    }
-  }
-}
-
-function collisionDetection(){
-  for(let c=0;c<brickColumnCount;c++){
-    for(let r=0;r<brickRowCount;r++){
-      let b=bricks[c][r];
-      if(b.status==1){
-        if(x>b.x && x<b.x+brickWidth && y>b.y && y<b.y+brickHeight){
-          dy=-dy;
-          b.status=0;
-          score++;
-          if(Math.random()<0.2){
-            powerUps.push({x:b.x+brickWidth/2,y:b.y,type:"expand"});
-          }
-          if(score==brickRowCount*brickColumnCount*level){
-            level++;
-            brickRowCount++;
-            createBricks();
-            resetGame();
-          }
+    for(let r=0;r<rows;r++){
+        for(let c=0;c<cols;c++){
+            bricks.push({
+                x:offsetX+c*(bw+pad),
+                y:50+r*(bh+pad),
+                w:bw,
+                h:bh,
+                alive:true
+            });
         }
-      }
     }
-  }
 }
 
-function drawPowerUps(){
-  for(let i=0;i<powerUps.length;i++){
-    let p=powerUps[i];
-    p.y+=2;
-    ctx.beginPath();
-    ctx.arc(p.x,p.y,8,0,Math.PI*2);
-    ctx.fillStyle="lime";
-    ctx.fill();
-    ctx.closePath();
+document.addEventListener("mousemove",e=>{
+    const rect=canvas.getBoundingClientRect();
+    paddle.x=e.clientX-rect.left-paddle.w/2;
+    clampPaddle();
+});
 
-    if(p.y>canvas.height-paddleHeight-10 && 
-       p.x>paddleX && p.x<paddleX+paddleWidth){
-        paddleWidth+=30;
-        powerUps.splice(i,1);
+canvas.addEventListener("touchmove",e=>{
+    const rect=canvas.getBoundingClientRect();
+    paddle.x=e.touches[0].clientX-rect.left-paddle.w/2;
+    clampPaddle();
+});
+
+function clampPaddle(){
+    if(paddle.x<0)paddle.x=0;
+    if(paddle.x+paddle.w>canvas.width)
+        paddle.x=canvas.width-paddle.w;
+}
+
+function spawnPower(x,y){
+    if(Math.random()<0.3){
+        const types=["expand","multi","slow"];
+        powerUps.push({
+            x,y,
+            type:types[Math.floor(Math.random()*3)],
+            dy:2
+        });
     }
-  }
+}
+
+function applyPower(type){
+    if(type==="expand"){
+        paddle.w+=40;
+        setTimeout(()=>{paddle.w-=40;},6000);
+    }
+    if(type==="multi"){
+        balls.push(createBall());
+    }
+    if(type==="slow"){
+        balls.forEach(b=>{b.dx*=0.6;b.dy*=0.6;});
+        setTimeout(()=>{balls.forEach(b=>{b.dx/=0.6;b.dy/=0.6;});},5000);
+    }
+}
+
+function update(){
+
+    balls.forEach(ball=>{
+        ball.x+=ball.dx;
+        ball.y+=ball.dy;
+
+        if(ball.x-ball.r<0||ball.x+ball.r>canvas.width) ball.dx*=-1;
+        if(ball.y-ball.r<0) ball.dy*=-1;
+
+        if(ball.x>paddle.x && ball.x<paddle.x+paddle.w &&
+           ball.y+ball.r>paddle.y){
+            ball.dy=-Math.abs(ball.dy);
+        }
+
+        bricks.forEach(b=>{
+            if(b.alive){
+                if(ball.x>b.x && ball.x<b.x+b.w &&
+                   ball.y>b.y && ball.y<b.y+b.h){
+                    ball.dy*=-1;
+                    b.alive=false;
+                    score+=10;
+                    spawnPower(b.x+b.w/2,b.y);
+                }
+            }
+        });
+    });
+
+    // Remove fallen balls
+    balls = balls.filter(ball => ball.y - ball.r <= canvas.height);
+
+    // If ALL balls gone → lose 1 life
+    if(balls.length===0){
+        lives--;
+
+        if(lives<=0){
+            running=false;
+            alert("Game Over! Final Score: "+score);
+            document.getElementById("menu").style.display="block";
+            return;
+        }
+
+        balls.push(createBall());
+    }
+
+    bricks=bricks.filter(b=>b.alive);
+
+    if(bricks.length===0){
+        level++;
+        rows++;
+        generateBricks();
+    }
+
+    powerUps.forEach(p=>{
+        p.y+=p.dy;
+        if(p.y>paddle.y && p.x>paddle.x && p.x<paddle.x+paddle.w){
+            applyPower(p.type);
+            p.y=9999;
+        }
+    });
+    powerUps=powerUps.filter(p=>p.y<canvas.height);
+
+    if(score>highScore){
+        highScore=score;
+        localStorage.setItem("tbHigh",highScore);
+    }
+
+    document.getElementById("score").innerText=score;
+    document.getElementById("lives").innerText=lives;
+    document.getElementById("level").innerText=level;
+    document.getElementById("high").innerText=highScore;
 }
 
 function draw(){
-  if(!gameStarted) return;
-  if(paused){
-    ctx.fillStyle="white";
-    ctx.fillText("Paused",canvas.width/2-30,canvas.height/2);
-    requestAnimationFrame(draw);
-    return;
-  }
+    ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawBricks();
-  drawBall();
-  drawPaddle();
-  drawPowerUps();
-  collisionDetection();
+    bricks.forEach(b=>{
+        ctx.fillStyle="cyan";
+        ctx.fillRect(b.x,b.y,b.w,b.h);
+    });
 
-  ctx.fillText("Score: "+score,8,20);
-  ctx.fillText("Lives: "+lives,canvas.width-70,20);
-  ctx.fillText("Level: "+level,canvas.width/2-30,20);
+    powerUps.forEach(p=>{
+        ctx.fillStyle="orange";
+        ctx.fillRect(p.x-6,p.y-6,12,12);
+    });
 
-  if(x+dx>canvas.width-ballRadius||x+dx<ballRadius) dx=-dx;
-  if(y+dy<ballRadius) dy=-dy;
-  else if(y+dy>canvas.height-ballRadius-10){
-    if(x>paddleX && x<paddleX+paddleWidth){
-      dy=-dy;
-    } else {
-      lives--;
-      if(!lives){
-        alert("GAME OVER");
-        document.location.reload();
-      } else {
-        resetGame();
-      }
-    }
-  }
+    ctx.fillStyle="lime";
+    ctx.beginPath();
+    ctx.roundRect(paddle.x,paddle.y,paddle.w,paddle.h,12);
+    ctx.fill();
 
-  if(rightPressed && paddleX<canvas.width-paddleWidth) paddleX+=7;
-  else if(leftPressed && paddleX>0) paddleX-=7;
-
-  x+=dx;
-  y+=dy;
-
-  requestAnimationFrame(draw);
+    balls.forEach(ball=>{
+        ctx.beginPath();
+        ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2);
+        ctx.fillStyle="white";
+        ctx.fill();
+    });
 }
+
+function loop(){
+    if(running){
+        update();
+        draw();
+    }
+    requestAnimationFrame(loop);
+}
+loop();
 </script>
 </body>
 </html>
