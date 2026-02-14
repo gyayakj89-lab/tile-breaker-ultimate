@@ -19,6 +19,7 @@ canvas {
   margin:auto;
   border-radius:12px;
   box-shadow:0 0 20px cyan;
+  touch-action: none;
 }
 
 #menu {
@@ -122,9 +123,21 @@ document.addEventListener("keyup", e=>{
   if(e.key==="Left"||e.key==="ArrowLeft") leftPressed=false;
 });
 
+// Mouse Control (PC)
 canvas.addEventListener("mousemove", e=>{
-  let relativeX = e.clientX - canvas.offsetLeft;
-  if(relativeX>0 && relativeX<canvas.width){
+  let rect = canvas.getBoundingClientRect();
+  let relativeX = e.clientX - rect.left;
+  if(relativeX > 0 && relativeX < canvas.width){
+    paddleX = relativeX - paddleWidth/2;
+  }
+});
+
+// Touch Control (Mobile)
+canvas.addEventListener("touchmove", e=>{
+  let rect = canvas.getBoundingClientRect();
+  let touch = e.touches[0];
+  let relativeX = touch.clientX - rect.left;
+  if(relativeX > 0 && relativeX < canvas.width){
     paddleX = relativeX - paddleWidth/2;
   }
 });
